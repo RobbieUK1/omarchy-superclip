@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "robbie.superclip",
+  "name": "SuperClip",
+  "version": "1.0.0",
+  "author": "Robbie",
+  "license": "MIT",
+  "description": "Enhanced clipboard manager with text snippets, images, screenshots and SuperClips",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "SuperClip.qml"
+  },
+  "barWidget": {
+    "displayName": "SuperClip",
+    "description": "Enhanced clipboard manager with searchable text snippets, clipboard images, a screenshot browser, and saved SuperClips you can paste with one click. Left-click (or middle-click) the icon to open the panel.",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
