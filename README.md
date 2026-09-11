@@ -3,17 +3,17 @@
 Enhanced clipboard manager for the Omarchy shell bar.
 
 SuperClip is a `bar-widget` plugin: one paperclip button in the bar opens a
-popup with four tabs:
+popup with four tabs I've tried to make it feature rich but simple:
 
 | Tab        | What it shows                                                     |
 |------------|-------------------------------------------------------------------|
 | Text       | Searchable clipboard text history. Hover a row for preview tools;  |
-|            | star it (paperclip) to save as a SuperClip, or delete it.          |
-| Images     | Clipboard image history in a grid, size-matched to screenshots.    |
+|            | star it (paperclip) to save as a SuperClip, or delete it (Trashcan).          |
+| Images     | Clipboard image history.    |
 |            | Hover a thumbnail for a large preview; save or delete individually.|
 | Screenshots| The current `screenshot-*.png` files on disk. Same preview/save/   |
 |            | delete actions as images.                                          |
-| SuperClips | Your saved snippets (text and images), searchable, with edit and   |
+| SuperClips | Your saved SuperClips (snippets) (text and images), searchable, with edit and   |
 |            | delete actions. Add new ones with the **+ Add** button.            |
 
 Hovering any image (Images, Screenshots, or an image SuperClip) shows a large
