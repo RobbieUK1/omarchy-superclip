@@ -3,7 +3,7 @@
 Enhanced clipboard manager for the Omarchy shell bar.
 
 SuperClip is a `bar-widget` plugin: one paperclip button in the bar opens a
-popup with four tabs I've tried to make it feature rich but simple:
+popup with four tabs. I've tried to make it feature rich but simple:
 
 | Tab        | What it shows                                                     |
 |------------|-------------------------------------------------------------------|
