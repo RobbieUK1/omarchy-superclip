@@ -8,7 +8,8 @@ popup with four tabs I've tried to make it feature rich but simple:
 | Tab        | What it shows                                                     |
 |------------|-------------------------------------------------------------------|
 | Text       | Searchable clipboard text history. Hover a row for preview tools;  |
-|            | star it (paperclip) to save as a SuperClip, or delete it (Trashcan).          |
+|            | star it (paperclip) to save as a SuperClip, or delete it (Trashcan).|
+|            | Click the star again to un-star.                                  |
 | Images     | Clipboard image history.    |
 |            | Hover a thumbnail for a large preview; save or delete individually.|
 | Screenshots| The current `screenshot-*.png` files on disk. Same preview/save/   |
@@ -16,8 +17,13 @@ popup with four tabs I've tried to make it feature rich but simple:
 | SuperClips | Your saved SuperClips (snippets) (text and images), searchable, with edit and   |
 |            | delete actions. Add new ones with the **+ Add** button.            |
 
+New SuperClips are added to the top of the list. Each list scrolls and stays
+inside the panel's 560px height limit, with a thin scroll indicator when it
+overflows.
+
 Hovering any image (Images, Screenshots, or an image SuperClip) shows a large
-preview in the corner of the panel.
+preview floating beside the panel, aligned with the thumbnail. If the panel is
+pinned to the left edge, the preview flips to the right side instead.
 
 ## Requirements
 

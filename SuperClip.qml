@@ -10,7 +10,7 @@ Item {
 
   property var bar: null
   property string moduleName: ""
-  property var settings: ({})
+  property var moduleSettings: ({})
 
   property var texts: []
   property var images: []
@@ -20,6 +20,8 @@ Item {
   property string textFilter: ""
   property string favFilter: ""
   property string hoverPreviewPath: ""
+  property var hoverPreviewItem: null
+  property int scrollEpoch: 0
 
   readonly property var filteredTexts: {
     var q = root.textFilter.trim().toLowerCase()
@@ -41,6 +43,18 @@ Item {
     }
     return out
   }
+
+  // Cap the SuperClips list so the panel stays within its 560px height limit
+  // (KeyboardPanel: fittedContentHeight(min(style.space(560), contentHeightFor))).
+  readonly property int maxResponseListHeight: Math.max(
+    Style.space(120),
+    Style.space(560) - (Style.space(32) + 1 + Style.space(50) + Style.space(10) + Style.space(36) + Style.space(36) + Style.space(4) + Style.space(10)))
+
+  // Cap the Text / Images / Screenshots scrolling content (below the search /
+  // clear-all row) so those tabs stay inside the 560px panel as well.
+  readonly property int maxScrollHeight: Math.max(
+    Style.space(120),
+    Style.space(560) - (Style.space(32) + 1 + Style.space(50) + Style.space(6) + Style.space(42) + Style.space(6)))
 
   function textOriginalIndex(i) {
     var t = root.filteredTexts[i]
@@ -251,12 +265,32 @@ Item {
     Util.execDetached(script + " && " + root.universalPasteCommand())
   }
 
+  function unfavouriteText(text) {
+    var list = []
+    for (var i = 0; i < root.responses.length; i++) {
+      var r = root.responses[i]
+      if (r.type === "image" || r.text !== text) list.push(r)
+    }
+    root.responses = list
+    root.save()
+  }
+
+  function unfavouriteImage(path) {
+    var list = []
+    for (var i = 0; i < root.responses.length; i++) {
+      var r = root.responses[i]
+      if (r.type !== "image" || r.path !== path) list.push(r)
+    }
+    root.responses = list
+    root.save()
+  }
+
   function addScreenshotToSnippets(i) {
     var entry = root.screenshots[i]
     if (!entry) return
-    if (root.inImageSnippets(entry.path)) return
+    if (root.inImageSnippets(entry.path)) { root.unfavouriteImage(entry.path); return }
     var list = root.responses.slice()
-    list.push({
+    list.unshift({
       label: root.basename(entry.path),
       type: "image",
       mime: entry.mime || "image/png",
@@ -363,16 +397,16 @@ Item {
   function addTextToSnippets(i) {
     var entry = root.texts[i]
     if (!entry || !entry.text) return
-    if (root.inTextSnippets(entry.text)) return
+    if (root.inTextSnippets(entry.text)) { root.unfavouriteText(entry.text); return }
     root.addResponse(root.preview(entry.text), entry.text)
   }
 
   function addImageToSnippets(i) {
     var entry = root.images[i]
     if (!entry) return
-    if (root.inImageSnippets(entry.path)) return
+    if (root.inImageSnippets(entry.path)) { root.unfavouriteImage(entry.path); return }
     var list = root.responses.slice()
-    list.push({
+    list.unshift({
       label: root.basename(entry.path),
       type: "image",
       mime: entry.mime || "image/png",
@@ -428,7 +462,7 @@ Item {
 
   function addResponse(label, text) {
     var list = root.responses.slice()
-    list.push({ label: label, text: text })
+    list.unshift({ label: label, text: text })
     root.responses = list
     root.save()
   }
@@ -465,15 +499,15 @@ Item {
     h += Style.space(50) // tab bar
     if (root.currentTab === 0) {
       h += Style.space(6)
-      h += Math.max(1, root.filteredTexts.length) * Style.space(52) + Math.max(0, root.filteredTexts.length - 1) * Style.space(4)
+      h += Math.min(Math.max(1, root.filteredTexts.length) * Style.space(52) + Math.max(0, root.filteredTexts.length - 1) * Style.space(4), root.maxScrollHeight)
       h += Style.space(42) // clear-all row
     } else if (root.currentTab === 1) {
       h += Style.space(6)
-      h += root.imageRows() * Style.space(88) + (root.imageRows() - 1) * Style.space(8)
+      h += Math.min(root.imageRows() * Style.space(88) + (root.imageRows() - 1) * Style.space(8), root.maxScrollHeight)
       h += Style.space(42) // clear-all row
     } else if (root.currentTab === 2) {
       h += Style.space(6)
-      h += root.screenshotRows() * Style.space(88) + (root.screenshotRows() - 1) * Style.space(8)
+      h += Math.min(root.screenshotRows() * Style.space(88) + (root.screenshotRows() - 1) * Style.space(8), root.maxScrollHeight)
       h += Style.space(42) // clear-all row
     } else {
       h += Style.space(10)
@@ -488,11 +522,13 @@ Item {
       } else {
         h += Style.space(36) // search/clear row spacer
         h += Style.space(36) // add button
+        var listH = 0
         for (var fi = 0; fi < root.filteredResponses.length; fi++) {
           var fr = root.filteredResponses[fi]
-          h += (fr && fr.type === "image" ? Style.space(88) : Style.space(44))
+          listH += (fr && fr.type === "image" ? Style.space(88) : Style.space(44))
         }
-        h += Math.max(0, root.filteredResponses.length - 1) * Style.space(4)
+        listH += Math.max(0, root.filteredResponses.length - 1) * Style.space(4)
+        h += Math.min(listH, root.maxResponseListHeight)
         h += Style.space(4)
         h += Style.space(10)
       }
@@ -514,7 +550,9 @@ Item {
     }
   }
 
-  onCurrentTabChanged: root.hoverPreviewPath = ""
+  onCurrentTabChanged: {
+    root.hoverPreviewPath = ""
+  }
 
   property bool screenshotRefreshQueued: false
 
@@ -574,8 +612,8 @@ Item {
         root.responses = Array.isArray(parsed) ? parsed : []
       } catch (e) { root.responses = [] }
     }
-    onLoadFailed: root.responses = []
-    onFileChanged: reload()
+    onLoadFailed: { root.responses = [] }
+    onFileChanged: { reload() }
   }
 
   implicitWidth: button.implicitWidth
@@ -606,6 +644,7 @@ Item {
     contentHeight: panel.fittedContentHeight(Math.min(Style.space(560), root.contentHeightFor()))
 
     Item {
+      id: panelContent
       anchors.fill: parent
 
       ColumnLayout {
@@ -708,7 +747,7 @@ Item {
         Item {
           Layout.fillWidth: true
           Layout.preferredHeight: root.currentTab === 0
-            ? Math.max(1, root.filteredTexts.length) * Style.space(52) + Math.max(0, root.filteredTexts.length - 1) * Style.space(4) + Style.space(48)
+            ? Math.min(Math.max(1, root.filteredTexts.length) * Style.space(52) + Math.max(0, root.filteredTexts.length - 1) * Style.space(4), root.maxScrollHeight) + Style.space(48)
             : 0
           visible: root.currentTab === 0
           clip: true
@@ -723,14 +762,26 @@ Item {
             onClicked: root.clearTexts()
           }
 
-          Column {
-            anchors.fill: parent
+          Flickable {
+            id: textScroll
+            anchors.top: parent.top
             anchors.topMargin: Style.space(42)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
             anchors.bottomMargin: Style.space(6)
-            spacing: Style.space(4)
+            clip: true
+            contentWidth: width
+            contentHeight: textColumn.height
+            boundsBehavior: Flickable.StopAtBounds
 
-            Repeater {
-              model: root.filteredTexts
+            Column {
+              id: textColumn
+              width: parent.width
+              spacing: Style.space(4)
+
+              Repeater {
+                model: root.filteredTexts
 
               Rectangle {
                 required property var modelData
@@ -776,11 +827,11 @@ Item {
                   font.pixelSize: Math.round(Style.font.body)
                   horizontalAlignment: Text.AlignHCenter
                   verticalAlignment: Text.AlignVCenter
-                  z: 2
+                  z: 60
 
                   PanelToolTip {
                     visible: textStarArea.containsMouse
-                    text: "Add To Snippets"
+                    text: root.inTextSnippets(modelData.text) ? "Remove From SuperClip" : "Add To SuperClip"
                   }
 
                   MouseArea {
@@ -806,7 +857,7 @@ Item {
                   font.pixelSize: Math.round(Style.font.body)
                   horizontalAlignment: Text.AlignHCenter
                   verticalAlignment: Text.AlignVCenter
-                  z: 2
+                  z: 61
 
                   PanelToolTip {
                     visible: textDeleteArea.containsMouse
@@ -836,6 +887,11 @@ Item {
               topPadding: Style.space(20)
               bottomPadding: Style.space(20)
             }
+            }
+          }
+
+          ListScrollIndicator {
+            flick: textScroll
           }
         }
 
@@ -844,7 +900,7 @@ Item {
           id: gridArea
           Layout.fillWidth: true
           Layout.preferredHeight: root.currentTab === 1
-            ? root.imageRows() * Style.space(88) + (root.imageRows() - 1) * Style.space(8) + Style.space(48)
+            ? Math.min(root.imageRows() * Style.space(88) + (root.imageRows() - 1) * Style.space(8), root.maxScrollHeight) + Style.space(48)
             : 0
           visible: root.currentTab === 1
           clip: true
@@ -853,15 +909,28 @@ Item {
             onClicked: root.clearImages()
           }
 
-          Grid {
-            anchors.fill: parent
+          Flickable {
+            id: imageScroll
+            anchors.top: parent.top
             anchors.topMargin: Style.space(42)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
             anchors.bottomMargin: Style.space(6)
-            spacing: Style.space(8)
-            columns: Math.max(1, Math.floor((root.panelContentWidth - Style.space(8)) / Style.space(88)))
+            clip: true
+            contentWidth: width
+            contentHeight: imageGrid.height
+            boundsBehavior: Flickable.StopAtBounds
+            onContentYChanged: root.scrollEpoch++
 
-            Repeater {
-              model: root.images
+            Grid {
+              id: imageGrid
+              width: parent.width
+              spacing: Style.space(8)
+              columns: Math.max(1, Math.floor((root.panelContentWidth - Style.space(8)) / Style.space(88)))
+
+              Repeater {
+                model: root.images
 
               Rectangle {
                 required property var modelData
@@ -909,11 +978,11 @@ Item {
                   opacity: root.hoverIndex === index || imageStarArea.containsMouse || root.inImageSnippets(modelData.path) ? 1 : 0.7
                   style: Text.Outline
                   styleColor: "black"
-                  z: 2
+                  z: 60
 
                   PanelToolTip {
                     visible: imageStarArea.containsMouse
-                    text: "Add To Snippets"
+                    text: root.inImageSnippets(modelData.path) ? "Remove From SuperClip" : "Add To SuperClip"
                   }
 
                   MouseArea {
@@ -942,7 +1011,7 @@ Item {
                   opacity: root.hoverIndex === index || imageDeleteArea.containsMouse ? 1 : 0
                   style: Text.Outline
                   styleColor: "black"
-                  z: 3
+                  z: 61
 
                   PanelToolTip {
                     visible: imageDeleteArea.containsMouse
@@ -966,11 +1035,16 @@ Item {
                   hoverEnabled: true
                   acceptedButtons: Qt.NoButton
                   cursorShape: Qt.PointingHandCursor
-                  onEntered: root.hoverPreviewPath = modelData.path
-                  onExited: root.hoverPreviewPath = ""
+                  onEntered: { root.hoverPreviewPath = modelData.path; root.hoverPreviewItem = parent }
+                  onExited: { root.hoverPreviewPath = ""; root.hoverPreviewItem = null }
                 }
               }
             }
+          }
+          }
+
+          ListScrollIndicator {
+            flick: imageScroll
           }
 
           Text {
@@ -988,7 +1062,7 @@ Item {
           id: shotArea
           Layout.fillWidth: true
           Layout.preferredHeight: root.currentTab === 2
-            ? root.screenshotRows() * Style.space(88) + (root.screenshotRows() - 1) * Style.space(8) + Style.space(48)
+            ? Math.min(root.screenshotRows() * Style.space(88) + (root.screenshotRows() - 1) * Style.space(8), root.maxScrollHeight) + Style.space(48)
             : 0
           visible: root.currentTab === 2
           clip: true
@@ -997,15 +1071,28 @@ Item {
             onClicked: root.clearScreenshots()
           }
 
-          Grid {
-            anchors.fill: parent
+          Flickable {
+            id: shotScroll
+            anchors.top: parent.top
             anchors.topMargin: Style.space(42)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
             anchors.bottomMargin: Style.space(6)
-            spacing: Style.space(8)
-            columns: Math.max(1, Math.floor((root.panelContentWidth - Style.space(8)) / Style.space(88)))
+            clip: true
+            contentWidth: width
+            contentHeight: shotGrid.height
+            boundsBehavior: Flickable.StopAtBounds
+            onContentYChanged: root.scrollEpoch++
 
-            Repeater {
-              model: root.screenshots
+            Grid {
+              id: shotGrid
+              width: parent.width
+              spacing: Style.space(8)
+              columns: Math.max(1, Math.floor((root.panelContentWidth - Style.space(8)) / Style.space(88)))
+
+              Repeater {
+                model: root.screenshots
 
               Rectangle {
                 required property var modelData
@@ -1053,11 +1140,11 @@ Item {
                   opacity: root.hoverIndex === index || shotStarArea.containsMouse || root.inImageSnippets(modelData.path) ? 1 : 0.7
                   style: Text.Outline
                   styleColor: "black"
-                  z: 2
+                  z: 60
 
                   PanelToolTip {
                     visible: shotStarArea.containsMouse
-                    text: "Add To Snippets"
+                    text: root.inImageSnippets(modelData.path) ? "Remove From SuperClip" : "Add To SuperClip"
                   }
 
                   MouseArea {
@@ -1086,7 +1173,7 @@ Item {
                   opacity: root.hoverIndex === index || shotDeleteArea.containsMouse ? 1 : 0
                   style: Text.Outline
                   styleColor: "black"
-                  z: 3
+                  z: 61
 
                   PanelToolTip {
                     visible: shotDeleteArea.containsMouse
@@ -1110,11 +1197,16 @@ Item {
                   hoverEnabled: true
                   acceptedButtons: Qt.NoButton
                   cursorShape: Qt.PointingHandCursor
-                  onEntered: root.hoverPreviewPath = modelData.path
-                  onExited: root.hoverPreviewPath = ""
+                  onEntered: { root.hoverPreviewPath = modelData.path; root.hoverPreviewItem = parent }
+                  onExited: { root.hoverPreviewPath = ""; root.hoverPreviewItem = null }
                 }
               }
             }
+          }
+          }
+
+          ListScrollIndicator {
+            flick: shotScroll
           }
 
           Text {
@@ -1183,16 +1275,27 @@ Item {
               }
             }
 
-            // Response list
-            Column {
-              id: listColumn
+            // Response list — scrollable so all favourites stay reachable when
+            // the list grows beyond the panel's 560px height cap.
+            Flickable {
+              id: listScroll
               width: parent.width
-              topPadding: Style.space(4)
-              bottomPadding: Style.space(10)
-              spacing: Style.space(4)
+              height: root.editing ? 0 : Math.max(1, parent.height - Style.space(36) - Style.space(36))
               visible: !root.editing
+              clip: true
+              contentWidth: width
+              contentHeight: listColumn.height
+              boundsBehavior: Flickable.StopAtBounds
+              onContentYChanged: root.scrollEpoch++
 
-              Repeater {
+              Column {
+                id: listColumn
+                width: parent.width
+                topPadding: Style.space(4)
+                bottomPadding: Style.space(10)
+                spacing: Style.space(4)
+
+                Repeater {
                 model: root.filteredResponses
 
                 Item {
@@ -1281,7 +1384,7 @@ Item {
                     anchors.bottomMargin: Style.space(4)
                     width: Style.space(28) * 2 + Style.space(8)
                     height: Style.space(28)
-                    z: 2
+                    z: 60
 
                     Text {
                       visible: modelData.type !== "image"
@@ -1329,8 +1432,8 @@ Item {
                     enabled: modelData.type === "image"
                     acceptedButtons: Qt.NoButton
                     cursorShape: Qt.PointingHandCursor
-                    onEntered: root.hoverPreviewPath = modelData.path
-                    onExited: root.hoverPreviewPath = ""
+                    onEntered: { root.hoverPreviewPath = modelData.path; root.hoverPreviewItem = parent }
+                    onExited: { root.hoverPreviewPath = ""; root.hoverPreviewItem = null }
                   }
 
                   // Row-level paste on the label area.
@@ -1345,16 +1448,17 @@ Item {
                 }
               }
 
-              Text {
-                width: listColumn.width
-                visible: root.filteredResponses.length === 0
-                text: root.responses.length === 0 ? "No saved responses" : "No matches"
-                color: Util.alpha(Color.popups.text, 0.5)
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.body
-                horizontalAlignment: Text.AlignHCenter
-                topPadding: Style.space(20)
-                bottomPadding: Style.space(20)
+                Text {
+                  width: listColumn.width
+                  visible: root.filteredResponses.length === 0
+                  text: root.responses.length === 0 ? "No saved responses" : "No matches"
+                  color: Util.alpha(Color.popups.text, 0.5)
+                  font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                  font.pixelSize: Style.font.body
+                  horizontalAlignment: Text.AlignHCenter
+                  topPadding: Style.space(20)
+                  bottomPadding: Style.space(20)
+                }
               }
             }
 
@@ -1511,16 +1615,51 @@ Item {
               }
             }
           }
+
+          // Thin scroll indicator for the response list. Only appears when the
+          // list overflows the panel; scrolls with the Flickable.
+          Rectangle {
+            id: listScrollbar
+            visible: listScroll.visible && listScroll.contentHeight > listScroll.height
+            width: Style.space(3)
+            radius: width / 2
+            color: Util.alpha(Color.popups.text, 0.3)
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(4)
+            height: Math.max(Style.space(20), listScroll.height * listScroll.height / Math.max(1, listScroll.contentHeight))
+            y: listScroll.y + (listScroll.height - height) * listScroll.contentY / Math.max(1, listScroll.contentHeight - listScroll.height)
+          }
         }
       }
     }
 
-    // Hover preview overlay for image thumbnails.
+    // Hover preview for image/screenshot thumbnails. The popover is only
+    // ~360px wide with a 280px preview, so placing it beside a thumbnail
+    // inside the pane always covered other thumbnails' paperclip/trash icons.
+    // Instead the preview floats in the desktop space to the LEFT of the
+    // popover (the bar-pinned panel sits at the screen edge, which leaves
+    // room), vertically aligned with the hovered thumbnail's row. The
+    // full-screen layer surface is not clipped, so it renders beyond the
+    // card. On scroll (root.scrollEpoch bumps in each Flickable's
+    // onContentYChanged) the thumbnail re-maps so the preview keeps tracking
+    // its row. If the popover is pinned to the screen's left edge, the
+    // preview flips to the right of it instead.
+    readonly property point hoverOrigin: {
+      root.scrollEpoch  // re-map when the thumbnail moves under the grid
+      if (!root.hoverPreviewItem || !panelContent) return Qt.point(0, 0)
+      return panelContent.mapFromItem(root.hoverPreviewItem, 0, 0)
+    }
+
     Rectangle {
       id: hoverPreview
-      anchors.right: parent.right
-      anchors.bottom: parent.bottom
-      anchors.margins: Style.space(8)
+      x: panel.cardOrigin.x >= width + Style.space(8) ? -width - Style.space(8) : panel.contentWidth + Style.space(8)
+      y: {
+        var itemH = root.hoverPreviewItem ? root.hoverPreviewItem.height : 0
+        var cy = panel.hoverOrigin.y - (height - itemH) / 2
+        var minY = Style.space(6) - panel.cardOrigin.y
+        var maxY = panel.screenH - panel.cardOrigin.y - height - Style.space(6)
+        return Math.max(minY, Math.min(maxY, cy))
+      }
       width: Math.min(Style.space(280), parent.width - Style.space(16))
       height: Math.min(Style.space(280), parent.height - Style.space(16))
       radius: Style.space(6)
@@ -1532,13 +1671,26 @@ Item {
       Image {
         anchors.fill: parent
         anchors.margins: Style.space(2)
-        source: "file://" + root.hoverPreviewPath
+        source: root.hoverPreviewPath ? "file://" + root.hoverPreviewPath : ""
         fillMode: Image.PreserveAspectFit
         asynchronous: true
         sourceSize.width: Math.max(Style.space(280), Math.round(width * 2))
         sourceSize.height: Math.max(Style.space(280), Math.round(height * 2))
       }
     }
+  }
+
+  component ListScrollIndicator: Rectangle {
+    id: scrollBar
+    required property Flickable flick
+    visible: scrollBar.flick.visible && scrollBar.flick.contentHeight > scrollBar.flick.height
+    width: Style.space(3)
+    radius: width / 2
+    color: Util.alpha(Color.popups.text, 0.3)
+    anchors.right: scrollBar.flick.right
+    anchors.rightMargin: Style.space(4)
+    height: Math.max(Style.space(20), scrollBar.flick.height * scrollBar.flick.height / Math.max(1, scrollBar.flick.contentHeight))
+    y: scrollBar.flick.y + (scrollBar.flick.height - height) * scrollBar.flick.contentY / Math.max(1, scrollBar.flick.contentHeight - scrollBar.flick.height)
   }
 
   component SearchBox: Rectangle {
